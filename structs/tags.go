@@ -1,0 +1,134 @@
+package structs
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+
+
+	"github.com/ittrada/restapi/routers/mux"
+	"github.com/ittrada/restapi/configs"
+)
+
+/*
+ * Tag... - standard tag used in frontend
+ */
+type Tag struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func AllTags(w http.ResponseWriter, r *http.Request) {
+	db := configs.Connect()
+	defer db.Close()
+
+	var tags []Tag
+	results, err := db.Query("SELECT id, name FROM tags")
+
+	for results.Next() {
+		var tag Tag
+		err = results.Scan(&tag.ID, &tag.Name)
+		if err != nil {
+			log.Print(err.Error()) // proper error handling instead of panic in your app
+			json.NewEncoder(w).Encode(HttpResp{Status: 200, Description: "Failed to select tag from database"})
+		}
+		tags = append(tags, tag)
+	}
+
+	json.NewEncoder(w).Encode(tags)
+}
+
+func GetTag(w http.ResponseWriter, r *http.Request) {
+	db := configs.Connect()
+	defer db.Close()
+
+	vars := mux.Vars(r)
+	tagID, err := strconv.Atoi(vars["id"])
+
+	if err != nil {
+		fmt.Fprintln(w, "Not a Valid id")
+	}
+
+	var tag Tag
+	// Execute the query
+	err = db.QueryRow("SELECT id, name FROM tags where id = ?", tagID).Scan(&tag.ID, &tag.Name)
+	if err != nil {
+		log.Print(err.Error()) // proper error handling instead of panic in your app
+		json.NewEncoder(w).Encode(HttpResp{Status: 500, Description: "Failed to select tag from database"})
+	}
+
+	json.NewEncoder(w).Encode(tag)
+}
+
+func InsertTag(w http.ResponseWriter, r *http.Request) {
+	db := configs.Connect()
+	defer db.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	var tag Tag
+	err := decoder.Decode(&tag)
+
+	if err != nil {
+		log.Print(err.Error())
+	}
+
+	stmt, _ := db.Prepare("INSERT INTO tags (name) values (?)")
+	res, err := stmt.Exec(tag.Name)
+	if err != nil {
+		log.Print(err.Error()) // proper error handling instead of panic in your app
+		json.NewEncoder(w).Encode(HttpResp{Status: 500, Description: "Failed to select tag from database"})
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		json.NewEncoder(w).Encode(HttpResp{Status: 500, Description: "Failed to get last insert id"})
+	}
+
+	json.NewEncoder(w).Encode(HttpResp{Status: 200, Description: "Successfully Inserted Tag Into the Database", Body: strconv.Itoa(int(id))})
+}
+
+func DeleteTag(w http.ResponseWriter, r *http.Request) {
+	db := configs.Connect()
+	defer db.Close()
+
+	vars := mux.Vars(r)
+	tagID := vars["id"]
+	ID, _ := strconv.Atoi(tagID)
+
+	stmt, err := db.Prepare("DELETE FROM tags where id = ?")
+	if err != nil {
+		log.Print(err.Error())
+	}
+
+	_, err = stmt.Exec(ID)
+	if err != nil {
+		json.NewEncoder(w).Encode(HttpResp{Status: 500, Description: "Failed to delete tag from database"})
+	}
+	json.NewEncoder(w).Encode(HttpResp{Status: 200, Description: "Successfully Deleted Tag from the Database"})
+
+}
+
+func EditTag(w http.ResponseWriter, r *http.Request) {
+	db := configs.Connect()
+	defer db.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	var newTag Tag
+	err := decoder.Decode(&newTag)
+
+	vars := mux.Vars(r)
+	tagID := vars["id"]
+	ID, _ := strconv.Atoi(tagID)
+
+	stmt, _ := db.Prepare("UPDATE tags SET name = ? WHERE id = ?")
+
+	_, err = stmt.Exec(newTag.Name, ID)
+
+	if err != nil {
+		log.Print(err.Error())
+	}
+	json.NewEncoder(w).Encode(HttpResp{Status: 200, Description: "Successfully Update Tag in the Database"})
+
+}

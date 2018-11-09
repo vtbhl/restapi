@@ -1,2 +1,2 @@
 # restapi
-golang restapi for cal360
+golang restapi
